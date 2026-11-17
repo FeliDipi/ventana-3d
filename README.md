@@ -8,7 +8,7 @@ PoC de una "ventana" 3D con head tracking: la webcam sigue tu cabeza y la escena
 
 - Al abrir, la página pide permiso para la cámara. Sin webcam funciona con el mouse (la rueda cambia la distancia).
 - **Pantalla completa** da el resultado más fiel.
-- Atajos: `D` debug, `A` ajustes (diagonal de pantalla, FOV de la webcam, distancia interpupilar, factor de profundidad), `C` centrar vista.
+- Atajos: `D` debug, `A` ajustes (diagonal de pantalla, FOV de la webcam, distancia interpupilar, factor de profundidad, distancia ojos → centro de la cabeza), `C` centrar vista.
 - Pensado para correr en la pantalla donde está la webcam (arriba al centro).
 
 ## Stack

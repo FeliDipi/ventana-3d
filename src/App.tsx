@@ -223,6 +223,14 @@ function DebugPanel({
         {tracking && d.face ? `${d.ipdPx.toFixed(1)} px · video ${d.videoSize.x}×${d.videoSize.y}` : '—'}
       </div>
       <div>
+        <span>Giro</span>
+        {tracking && d.face
+          ? `yaw ${d.yawDeg.toFixed(0)}° · pitch ${d.pitchDeg.toFixed(0)}° · k ${
+              d.poseScale === null ? 'sin pose' : `${d.poseScale.toFixed(3)}${d.poseCalibrated ? '' : ' (inicial)'}`
+            }`
+          : '—'}
+      </div>
+      <div>
         <span>Cara</span>
         {tracking ? `${d.face ? 'sí' : 'no'} · ${d.rate.toFixed(0)} Hz` : '—'}
       </div>
@@ -236,6 +244,7 @@ const FIELDS: { key: keyof PhysicalSettings; label: string; step: number; unit: 
   { key: 'ipdMm', label: 'Distancia interpupilar', step: 0.5, unit: 'mm' },
   { key: 'webcamAboveCm', label: 'Webcam sobre la pantalla', step: 0.1, unit: 'cm' },
   { key: 'depthFactor', label: 'Factor de profundidad (1 = físico)', step: 0.1, unit: '×', min: -1 },
+  { key: 'headDepthCm', label: 'Ojos → centro de la cabeza', step: 0.5, unit: 'cm' },
 ]
 
 function SettingsPanel({

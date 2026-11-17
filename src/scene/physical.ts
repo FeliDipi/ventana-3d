@@ -15,6 +15,8 @@ export interface PhysicalSettings {
    * 0 = distancia fija, negativo = invertido (para comparar la percepción).
    */
   depthFactor: number
+  /** Distancia de los ojos al centro de giro de la cabeza, en cm. */
+  headDepthCm: number
 }
 
 /** Ajustes que admiten cero o negativos. */
@@ -26,6 +28,7 @@ export const DEFAULT_SETTINGS: PhysicalSettings = {
   ipdMm: 63,
   webcamAboveCm: 0.8,
   depthFactor: 1,
+  headDepthCm: 9,
 }
 
 const STORAGE_KEY = 'ventana-3d:settings'
