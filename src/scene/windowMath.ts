@@ -8,7 +8,8 @@ export const DEFAULT_EYE_Z = 0.55
 /** Límites de seguridad del punto de vista (no son el rango de uso normal). */
 export const EYE_LIMITS = { x: 0.6, y: 0.4, zMin: 0.2, zMax: 1.5 } as const
 export const NEAR = 0.01
-export const FAR = 20
+/** Diorama a escala real: el terreno llega a ~250 m y el cielo está a 1800 m. */
+export const FAR = 2500
 
 export interface Vec2 {
   x: number

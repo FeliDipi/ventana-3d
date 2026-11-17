@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Blender: el script es la fuente; el .glb exportado sí se versiona.
+blender/bake/
+blender/preview/
+*.blend
+*.blend1

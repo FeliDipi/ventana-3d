@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber'
-import { useCallback, useEffect, useRef, useState, type PointerEvent, type RefObject, type WheelEvent } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState, type PointerEvent, type RefObject, type WheelEvent } from 'react'
 import {
   computeViewport,
   DEFAULT_SETTINGS,
@@ -9,6 +9,9 @@ import {
   type PhysicalSettings,
   type Viewport,
 } from './scene/physical'
+import { Butterfly } from './scene/Butterfly'
+import { Diorama } from './scene/Diorama'
+import { Motes } from './scene/Motes'
 import { CenterMarker, Room } from './scene/Room'
 import { WindowCamera } from './scene/WindowCamera'
 import { clamp, DEFAULT_EYE_Z, FAR, NEAR, type Vec3, type ViewTarget } from './scene/windowMath'
@@ -39,6 +42,8 @@ export default function App() {
   const settingsRef = useRef(settings)
   const [debug, setDebug] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [testRoom, setTestRoom] = useState(false)
+  const [foreground, setForeground] = useState(true)
   const [fullscreen, setFullscreen] = useState(false)
   const { status, enable, recenter, resetCenter, centerOffsetRef, debugRef } = useHeadTracking(
     targetRef,
@@ -53,7 +58,8 @@ export default function App() {
     enable()
   }, [enable])
 
-  // Atajos de desarrollo (sin UI visible): D = debug, A = ajustes, C = centrar vista.
+  // Atajos de desarrollo (sin UI visible): D = debug, A = ajustes, C = centrar vista, E = escena de prueba,
+  // P = contenido delante de la pantalla (motas y mariposa).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return
@@ -61,6 +67,8 @@ export default function App() {
       if (k === 'd') setDebug((v) => !v)
       else if (k === 'a') setShowSettings((v) => !v)
       else if (k === 'c') recenter()
+      else if (k === 'e') setTestRoom((v) => !v)
+      else if (k === 'p') setForeground((v) => !v)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -144,11 +152,25 @@ export default function App() {
         <Canvas
           dpr={[1, 2]}
           camera={{ manual: true, position: [0, 0, DEFAULT_EYE_Z], near: NEAR, far: FAR }}
-          gl={{ antialias: true }}
+          // Profundidad logarítmica: de 1 cm (delante de la pantalla) a 2,5 km sin z-fighting.
+          gl={{ antialias: true, logarithmicDepthBuffer: true }}
         >
           <color attach="background" args={['#101216']} />
           <WindowCamera targetRef={targetRef} viewportRef={viewportRef} appliedRef={appliedRef} />
-          <Room />
+          {testRoom ? (
+            <Room />
+          ) : (
+            // La sala de prueba se ve mientras carga el diorama.
+            <Suspense fallback={<Room />}>
+              <Diorama />
+              {foreground && (
+                <>
+                  <Motes />
+                  <Butterfly />
+                </>
+              )}
+            </Suspense>
+          )}
           {debug && <CenterMarker />}
         </Canvas>
       </div>
