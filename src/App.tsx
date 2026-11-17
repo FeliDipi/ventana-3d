@@ -9,6 +9,9 @@ import {
   type PhysicalSettings,
   type Viewport,
 } from './scene/physical'
+import { Balls } from './game/Balls'
+import { Hud } from './game/Hud'
+import { useGame } from './game/useGame'
 import { CenterMarker, Room } from './scene/Room'
 import { WindowCamera } from './scene/WindowCamera'
 import { clamp, DEFAULT_EYE_Z, FAR, NEAR, type Vec3, type ViewTarget } from './scene/windowMath'
@@ -23,8 +26,8 @@ const STATUS_LABEL: Record<TrackingStatus, string> = {
   error: 'Cámara no disponible · usando mouse',
 }
 
-/** Recorrido del mouse como fracción de media abertura. */
-const MOUSE_REACH = 0.6
+/** Recorrido del mouse como fracción de media abertura (todo el ancho: hay que poder esquivar). */
+const MOUSE_REACH = 1
 const MOUSE_Z = { min: 0.25, max: 1.2 }
 
 const isCameraDriven = (s: TrackingStatus) => s === 'tracking' || s === 'no-face'
@@ -47,24 +50,30 @@ export default function App() {
   )
 
   const mouseActive = !isCameraDriven(status)
+  const game = useGame(status === 'no-face')
+  const { start } = game
 
   // La cámara se pide al cargar. Si se deniega o no hay webcam, queda el mouse.
   useEffect(() => {
     enable()
   }, [enable])
 
-  // Atajos de desarrollo (sin UI visible): D = debug, A = ajustes, C = centrar vista.
+  // Espacio / Enter = jugar. Atajos de desarrollo (sin UI visible): D = debug, A = ajustes, C = centrar vista.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return
       const k = e.key.toLowerCase()
-      if (k === 'd') setDebug((v) => !v)
+      if (k === ' ' || k === 'enter') {
+        // Evita que un botón con foco vuelva a dispararse.
+        e.preventDefault()
+        start()
+      } else if (k === 'd') setDebug((v) => !v)
       else if (k === 'a') setShowSettings((v) => !v)
       else if (k === 'c') recenter()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [recenter])
+  }, [recenter, start])
 
   // Geometría física del canvas: al redimensionar, al cambiar ajustes, al entrar/salir de
   // pantalla completa y periódicamente (mover la ventana no dispara eventos).
@@ -149,9 +158,29 @@ export default function App() {
           <color attach="background" args={['#101216']} />
           <WindowCamera targetRef={targetRef} viewportRef={viewportRef} appliedRef={appliedRef} />
           <Room />
+          <Balls
+            gameRef={game.gameRef}
+            appliedRef={appliedRef}
+            viewportRef={viewportRef}
+            onDodge={game.dodge}
+            onHit={game.hit}
+          />
           {debug && <CenterMarker />}
         </Canvas>
       </div>
+
+      <Hud
+        phase={game.phase}
+        score={game.score}
+        lives={game.lives}
+        best={game.best}
+        newRecord={game.newRecord}
+        counter={game.counter}
+        hits={game.hits}
+        paused={status === 'no-face'}
+        camera={isCameraDriven(status)}
+        onStart={start}
+      />
 
       {!fullscreen && (
         <button className="fs-button" onClick={enterFullscreen}>

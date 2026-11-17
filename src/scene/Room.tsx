@@ -1,30 +1,19 @@
 import { useMemo } from 'react'
 import { CanvasTexture, RepeatWrapping, SRGBColorSpace, type Texture } from 'three'
+import { ROOM, ROOM_SCALE } from './roomBounds'
 
 /**
  * Habitación de tamaño fijo en unidades de mundo. No depende del aspect ratio
  * del canvas, así que conserva sus proporciones al redimensionar.
- *
- * Abertura en z = 0. Todo lo demás está detrás (z < 0).
  */
-const FLOOR_Y = -0.22
-const CEILING_Y = 0.28
-const HALF_WIDTH = 0.7
-const BACK_Z = -1.4
+const FLOOR_Y = ROOM.floorY
+const CEILING_Y = ROOM.ceilingY
+const HALF_WIDTH = ROOM.halfWidth
+const BACK_Z = ROOM.backZ
 const DEPTH = -BACK_Z
 const HEIGHT = CEILING_Y - FLOOR_Y
 /** Espesor de piso y techo: rellena el frente si la abertura es más alta que la habitación. */
 const SLAB = 1
-
-const COLUMN = { x: 0, z: -0.15, size: 0.05 }
-const SPHERE = { x: 0.05, y: -0.02, z: -0.55, r: 0.07 }
-
-/**
- * Escala de la habitación (metros reales). La abertura ahora tiene el tamaño físico
- * del canvas (~0.30 m en una notebook), así que la escena se achica para conservar
- * proporciones parecidas a las del primer PoC. Ajustar a gusto.
- */
-const ROOM_SCALE = 0.7
 
 function makeTexture(size: number, draw: (ctx: CanvasRenderingContext2D, s: number) => void, repeatX: number, repeatY: number): Texture {
   const canvas = document.createElement('canvas')
@@ -112,18 +101,6 @@ export function Room() {
       <mesh position={[0, (FLOOR_Y + CEILING_Y) / 2, BACK_Z]}>
         <planeGeometry args={[HALF_WIDTH * 2, HEIGHT]} />
         <meshLambertMaterial map={grid} />
-      </mesh>
-
-      {/* Columna angosta cerca del plano de pantalla. */}
-      <mesh position={[COLUMN.x, (FLOOR_Y + CEILING_Y) / 2, COLUMN.z]}>
-        <boxGeometry args={[COLUMN.size, HEIGHT, COLUMN.size]} />
-        <meshLambertMaterial color="#2b2f36" />
-      </mesh>
-
-      {/* Esfera parcialmente oculta detrás de la columna. */}
-      <mesh position={[SPHERE.x, SPHERE.y, SPHERE.z]}>
-        <sphereGeometry args={[SPHERE.r, 48, 32]} />
-        <meshLambertMaterial color="#e8432e" />
       </mesh>
     </group>
   )
