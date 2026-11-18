@@ -1,5 +1,14 @@
 import { Canvas } from '@react-three/fiber'
-import { useCallback, useEffect, useRef, useState, type PointerEvent, type RefObject, type WheelEvent } from 'react'
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+  type RefObject,
+  type WheelEvent,
+} from 'react'
 import {
   computeViewport,
   DEFAULT_SETTINGS,
@@ -9,19 +18,22 @@ import {
   type PhysicalSettings,
   type Viewport,
 } from './scene/physical'
+import { Duck, type DuckApi } from './duck/Duck'
+import { unlockQuack } from './duck/quack'
 import { Balls } from './game/Balls'
 import { Hud } from './game/Hud'
 import { useGame } from './game/useGame'
 import { CenterMarker, Room } from './scene/Room'
 import { WindowCamera } from './scene/WindowCamera'
 import { clamp, DEFAULT_EYE_Z, FAR, NEAR, type Vec3, type ViewTarget } from './scene/windowMath'
+import { THEME } from './theme'
 import { useHeadTracking, type TrackingDebug, type TrackingStatus } from './tracking/useHeadTracking'
 
 const STATUS_LABEL: Record<TrackingStatus, string> = {
   off: 'Mouse · rueda = distancia',
   loading: 'Iniciando cámara…',
   tracking: 'Siguiendo cara',
-  'no-face': 'Cara no detectada',
+  'no-face': 'El pato no te ve',
   denied: 'Permiso denegado · usando mouse',
   error: 'Cámara no disponible · usando mouse',
 }
@@ -38,6 +50,7 @@ export default function App() {
   const mouseZRef = useRef(DEFAULT_EYE_Z)
   const stageRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<Viewport | null>(null)
+  const duckRef = useRef<DuckApi | null>(null)
   const [settings, setSettings] = useState<PhysicalSettings>(loadSettings)
   const settingsRef = useRef(settings)
   const [debug, setDebug] = useState(false)
@@ -49,16 +62,42 @@ export default function App() {
     viewportRef,
   )
 
-  const mouseActive = !isCameraDriven(status)
+  const cameraOn = isCameraDriven(status)
+  const mouseActive = !cameraOn
   const game = useGame(status === 'no-face')
-  const { start } = game
+  const { start: startGame, hit, dodge } = game
+
+  /** Toma la posición actual de la cabeza como centro (solo con cámara). El key reinicia el aviso. */
+  const [centeredKey, setCenteredKey] = useState(0)
+  const centerView = useCallback(() => {
+    if (!cameraOn) return
+    recenter()
+    setCenteredKey((n) => n + 1)
+  }, [cameraOn, recenter])
+
+  // "Jugar" es el gesto que habilita el audio del quack; además arranca con la vista centrada.
+  const start = useCallback(() => {
+    const phase = game.gameRef.current.phase
+    if (phase === 'countdown' || phase === 'playing') return
+    unlockQuack()
+    centerView()
+    startGame()
+  }, [centerView, game.gameRef, startGame])
+  const onHit = useCallback(() => {
+    hit()
+    duckRef.current?.react('hit')
+  }, [hit])
+  const onDodge = useCallback(() => {
+    dodge()
+    duckRef.current?.react('dodge')
+  }, [dodge])
 
   // La cámara se pide al cargar. Si se deniega o no hay webcam, queda el mouse.
   useEffect(() => {
     enable()
   }, [enable])
 
-  // Espacio / Enter = jugar. Atajos de desarrollo (sin UI visible): D = debug, A = ajustes, C = centrar vista.
+  // Espacio / Enter = jugar, C = centrar vista. Atajos de desarrollo (sin UI visible): D = debug, A = ajustes.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return
@@ -69,11 +108,11 @@ export default function App() {
         start()
       } else if (k === 'd') setDebug((v) => !v)
       else if (k === 'a') setShowSettings((v) => !v)
-      else if (k === 'c') recenter()
+      else if (k === 'c') centerView()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [recenter, start])
+  }, [centerView, start])
 
   // Geometría física del canvas: al redimensionar, al cambiar ajustes, al entrar/salir de
   // pantalla completa y periódicamente (mover la ventana no dispara eventos).
@@ -155,15 +194,19 @@ export default function App() {
           camera={{ manual: true, position: [0, 0, DEFAULT_EYE_Z], near: NEAR, far: FAR }}
           gl={{ antialias: true }}
         >
-          <color attach="background" args={['#101216']} />
+          <color attach="background" args={[THEME.background]} />
           <WindowCamera targetRef={targetRef} viewportRef={viewportRef} appliedRef={appliedRef} />
           <Room />
+          <Suspense fallback={null}>
+            <Duck apiRef={duckRef} gameRef={game.gameRef} appliedRef={appliedRef} viewportRef={viewportRef} />
+          </Suspense>
           <Balls
             gameRef={game.gameRef}
             appliedRef={appliedRef}
             viewportRef={viewportRef}
-            onDodge={game.dodge}
-            onHit={game.hit}
+            duckRef={duckRef}
+            onDodge={onDodge}
+            onHit={onHit}
           />
           {debug && <CenterMarker />}
         </Canvas>
@@ -178,15 +221,24 @@ export default function App() {
         counter={game.counter}
         hits={game.hits}
         paused={status === 'no-face'}
-        camera={isCameraDriven(status)}
+        camera={cameraOn}
         onStart={start}
       />
 
-      {!fullscreen && (
-        <button className="fs-button" onClick={enterFullscreen}>
-          Pantalla completa
-        </button>
+      {centeredKey > 0 && (
+        <div key={centeredKey} className="view-toast">
+          Vista centrada
+        </div>
       )}
+
+      <div className="view-buttons">
+        {cameraOn && (
+          <button onClick={centerView}>
+            Centrar vista <kbd>C</kbd>
+          </button>
+        )}
+        {!fullscreen && <button onClick={enterFullscreen}>Pantalla completa</button>}
+      </div>
 
       {debug && (
         <DebugPanel status={status} debugRef={debugRef} appliedRef={appliedRef} viewportRef={viewportRef} />

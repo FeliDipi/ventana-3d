@@ -1,3 +1,4 @@
+import { DuckIcon } from './DuckIcon'
 import { LIVES } from './difficulty'
 import type { GamePhase } from './useGame'
 
@@ -25,9 +26,7 @@ export function Hud({ phase, score, lives, best, newRecord, counter, hits, pause
       <div className="hud__bar">
         <div className="hud__lives" aria-label={`${lives} vidas`}>
           {Array.from({ length: LIVES }, (_, i) => (
-            <span key={i} className={i < lives ? 'heart' : 'heart heart--lost'}>
-              ♥
-            </span>
+            <DuckIcon key={i} className={i < lives ? 'life' : 'life life--lost'} />
           ))}
         </div>
         <div className="hud__score">
@@ -38,15 +37,22 @@ export function Hud({ phase, score, lives, best, newRecord, counter, hits, pause
           <small>esquivadas</small>
         </div>
         <div className="hud__best">
-          Mejor <strong>{best}</strong>
+          Récord <strong>{best}</strong>
         </div>
       </div>
 
       {phase === 'ready' && (
         <div className="hud__panel">
-          <h1>Esquivá</h1>
-          <p>{camera ? 'Mové la cabeza para esquivar las bolas.' : 'Mové el mouse para esquivar las bolas.'}</p>
-          <p className="hud__muted">3 vidas · cada vez más bolas y más rápido</p>
+          <h1 className="hud__title">
+            <span>Esquivá</span>
+            <span className="hud__title-outline">al pato</span>
+          </h1>
+          <p>
+            {camera
+              ? 'El pato del fondo te tira bolas. Mové la cabeza para esquivarlas.'
+              : 'El pato del fondo te tira bolas. Mové el mouse para esquivarlas.'}
+          </p>
+          <p className="hud__muted">3 vidas · cuando amaga, se viene el tiro</p>
           <button className="hud__button" onClick={onStart}>
             Jugar <kbd>Espacio</kbd>
           </button>
@@ -61,16 +67,28 @@ export function Hud({ phase, score, lives, best, newRecord, counter, hits, pause
 
       {inGame && paused && (
         <div className="hud__panel hud__panel--small">
-          <p>Cara no detectada</p>
-          <p className="hud__muted">Juego en pausa</p>
+          <p>El pato no te ve 👀</p>
+          <p className="hud__muted">Juego en pausa · volvé a la cámara</p>
         </div>
       )}
 
       {phase === 'over' && (
         <div className="hud__panel">
-          <h2>{newRecord ? '¡Nuevo récord!' : 'Fin del juego'}</h2>
+          <h2 className="hud__title hud__title--small">
+            {newRecord ? (
+              <>
+                <span>¡Récord</span>
+                <span className="hud__title-outline">del estanque!</span>
+              </>
+            ) : (
+              <>
+                <span>¡Te</span>
+                <span className="hud__title-outline">embocó!</span>
+              </>
+            )}
+          </h2>
           <div className="hud__final">{score}</div>
-          <p className="hud__muted">bolas esquivadas · mejor marca {best}</p>
+          <p className="hud__muted">bolas esquivadas · récord {best}</p>
           <button className="hud__button" onClick={onStart}>
             Jugar de nuevo <kbd>Espacio</kbd>
           </button>

@@ -1,10 +1,12 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { CanvasTexture, RepeatWrapping, SRGBColorSpace, type Texture } from 'three'
+import { THEME } from '../theme'
 import { ROOM, ROOM_SCALE } from './roomBounds'
 
 /**
  * Habitación de tamaño fijo en unidades de mundo. No depende del aspect ratio
  * del canvas, así que conserva sus proporciones al redimensionar.
+ * La grilla y el tablero del prototipo, en colores Tuxdi (ver `theme.ts`).
  */
 const FLOOR_Y = ROOM.floorY
 const CEILING_Y = ROOM.ceilingY
@@ -14,6 +16,9 @@ const DEPTH = -BACK_Z
 const HEIGHT = CEILING_Y - FLOOR_Y
 /** Espesor de piso y techo: rellena el frente si la abertura es más alta que la habitación. */
 const SLAB = 1
+
+const C = THEME.room
+const L = THEME.lights
 
 function makeTexture(size: number, draw: (ctx: CanvasRenderingContext2D, s: number) => void, repeatX: number, repeatY: number): Texture {
   const canvas = document.createElement('canvas')
@@ -29,15 +34,15 @@ function makeTexture(size: number, draw: (ctx: CanvasRenderingContext2D, s: numb
 }
 
 function useTextures() {
-  return useMemo(() => {
+  const textures = useMemo(() => {
     const TILE = 0.1 // baldosa de 10 cm virtuales
     // Tablero 2×2 baldosas por repetición.
     const floor = makeTexture(
       128,
       (ctx, s) => {
-        ctx.fillStyle = '#d9cbb3'
+        ctx.fillStyle = C.floorLight
         ctx.fillRect(0, 0, s, s)
-        ctx.fillStyle = '#8a6f52'
+        ctx.fillStyle = C.floorDark
         ctx.fillRect(0, 0, s / 2, s / 2)
         ctx.fillRect(s / 2, s / 2, s / 2, s / 2)
       },
@@ -49,9 +54,9 @@ function useTextures() {
     const grid = makeTexture(
       64,
       (ctx, s) => {
-        ctx.fillStyle = '#eef2f6'
+        ctx.fillStyle = C.gridFill
         ctx.fillRect(0, 0, s, s)
-        ctx.strokeStyle = '#3d6fa8'
+        ctx.strokeStyle = C.gridLine
         ctx.lineWidth = 4
         ctx.strokeRect(0, 0, s, s)
       },
@@ -60,6 +65,14 @@ function useTextures() {
     )
     return { floor, grid }
   }, [])
+  useEffect(
+    () => () => {
+      textures.floor.dispose()
+      textures.grid.dispose()
+    },
+    [textures],
+  )
+  return textures
 }
 
 export function Room() {
@@ -67,34 +80,34 @@ export function Room() {
 
   return (
     <group scale={ROOM_SCALE}>
-      <ambientLight intensity={1.4} />
-      <directionalLight position={[0.3, 0.8, 0.6]} intensity={1.6} />
+      <hemisphereLight args={[L.hemisphere.sky, L.hemisphere.ground, L.hemisphere.intensity]} />
+      <directionalLight color={L.directional.color} position={L.directional.position} intensity={L.directional.intensity} />
 
       {/* Piso con baldosas. */}
       <mesh position={[0, FLOOR_Y, BACK_Z / 2]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[HALF_WIDTH * 2, DEPTH]} />
         <meshLambertMaterial map={floor} />
       </mesh>
-      {/* Bloque oscuro bajo el piso: tapa el vacío si la abertura es más alta que la habitación. */}
+      {/* Bloque bajo el piso: tapa el vacío si la abertura es más alta que la habitación. */}
       <mesh position={[0, FLOOR_Y - 0.002 - SLAB / 2, BACK_Z / 2]}>
         <boxGeometry args={[HALF_WIDTH * 2, SLAB, DEPTH]} />
-        <meshLambertMaterial color="#3a3530" />
+        <meshLambertMaterial color={C.slab} />
       </mesh>
 
       {/* Techo. */}
       <mesh position={[0, CEILING_Y + SLAB / 2, BACK_Z / 2]}>
         <boxGeometry args={[HALF_WIDTH * 2, SLAB, DEPTH]} />
-        <meshLambertMaterial color="#c9ced6" />
+        <meshLambertMaterial color={C.ceiling} />
       </mesh>
 
       {/* Paredes laterales. */}
       <mesh position={[-HALF_WIDTH, (FLOOR_Y + CEILING_Y) / 2, BACK_Z / 2]} rotation={[0, Math.PI / 2, 0]}>
         <planeGeometry args={[DEPTH, HEIGHT]} />
-        <meshLambertMaterial color="#9fb3c8" />
+        <meshLambertMaterial color={C.wallLeft} />
       </mesh>
       <mesh position={[HALF_WIDTH, (FLOOR_Y + CEILING_Y) / 2, BACK_Z / 2]} rotation={[0, -Math.PI / 2, 0]}>
         <planeGeometry args={[DEPTH, HEIGHT]} />
-        <meshLambertMaterial color="#b4c4d4" />
+        <meshLambertMaterial color={C.wallRight} />
       </mesh>
 
       {/* Pared del fondo con cuadrícula. */}
