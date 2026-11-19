@@ -1,25 +1,32 @@
 /**
- * Medidas de la habitación. `ROOM` está en unidades locales del grupo de `Room`;
- * `ROOM_BOUNDS` ya está escalado a metros de mundo (lo usa el juego).
- * Abertura en z = 0; todo lo demás está detrás (z < 0).
+ * Medidas de la habitación, en metros de mundo. Abertura en z = 0; todo lo demás
+ * está detrás (z < 0).
+ *
+ * La sección (ancho y alto) sigue a la abertura física: las cuatro paredes nacen en
+ * los bordes del canvas y convergen hacia el fondo, que es lo que vende la "caja"
+ * detrás del vidrio. La profundidad es fija. `WindowCamera` la actualiza cada frame,
+ * así que quien lea `ROOM_BOUNDS` dentro de `useFrame` siempre ve los límites vivos.
  */
-export const ROOM = {
-  floorY: -0.22,
-  ceilingY: 0.28,
-  halfWidth: 0.7,
-  backZ: -1.4,
-} as const
+export const ROOM_DEPTH = 1.2
 
-/**
- * Escala de la habitación (metros reales). La abertura tiene el tamaño físico del
- * canvas (~0.30 m en una notebook), así que la escena se achica para conservar
- * proporciones parecidas a las del primer PoC. Ajustar a gusto.
- */
-export const ROOM_SCALE = 0.7
+/** Mínimos de la sección: en una ventana muy chica el pato tiene que seguir entrando. */
+const MIN_HALF_WIDTH = 0.12
+const MIN_HALF_HEIGHT = 0.09
 
 export const ROOM_BOUNDS = {
-  floorY: ROOM.floorY * ROOM_SCALE,
-  ceilingY: ROOM.ceilingY * ROOM_SCALE,
-  halfWidth: ROOM.halfWidth * ROOM_SCALE,
-  backZ: ROOM.backZ * ROOM_SCALE,
-} as const
+  floorY: -0.1,
+  ceilingY: 0.1,
+  halfWidth: 0.17,
+  backZ: -ROOM_DEPTH,
+}
+
+/** Ajusta la sección a la media abertura (metros). Devuelve true si cambió. */
+export function updateRoomBounds(halfW: number, halfH: number) {
+  const w = Math.max(MIN_HALF_WIDTH, halfW)
+  const h = Math.max(MIN_HALF_HEIGHT, halfH)
+  if (Math.abs(w - ROOM_BOUNDS.halfWidth) < 1e-5 && Math.abs(h - ROOM_BOUNDS.ceilingY) < 1e-5) return false
+  ROOM_BOUNDS.halfWidth = w
+  ROOM_BOUNDS.floorY = -h
+  ROOM_BOUNDS.ceilingY = h
+  return true
+}

@@ -1,36 +1,47 @@
 /**
- * Dirección artística "Lavanda clara": el hero claro de tuxdi.com sobre la grilla del
- * prototipo. Todos los colores de la escena 3D están acá; los de la HUD, en las
- * variables de `index.css` (mismos valores).
+ * Dirección artística "Violeta profundo": la habitación es una caja violeta oscura con
+ * grilla neón, y los orbes y las formas flotantes brillan encima. Todos los colores de
+ * la escena 3D están acá; los de la HUD, en las variables de `index.css`.
  */
 export const THEME = {
-  /** Fondo del canvas (fuera de la habitación). */
-  background: '#fbf5ff',
+  /** Fondo del canvas (fuera de la habitación) y color de la niebla. */
+  background: '#12052a',
 
   room: {
-    /** Pared del fondo: la grilla del prototipo (celdas de 5 cm). */
-    gridFill: '#fbf5ff',
-    gridLine: '#d8a6ff',
-    /** Piso: el tablero del prototipo (baldosas de 10 cm). */
-    floorLight: '#eac7ff',
-    floorDark: '#d8a6ff',
-    wallLeft: '#e9d7ff',
-    wallRight: '#f1e6ff',
-    ceiling: '#f7f1ff',
-    /** Bloque bajo el piso. */
-    slab: '#c9a7ff',
+    /** Relleno de las celdas de la grilla (pared del fondo). */
+    gridFill: '#24104a',
+    /** Líneas neón: brillan aunque no les dé la luz. */
+    gridLine: '#b44dff',
+    gridGlow: 0.65,
+    /** Piso: el tablero del prototipo (baldosas de 10 cm) con la grilla encima. */
+    floorLight: '#3a1a72',
+    floorDark: '#271052',
+    wallLeft: '#321566',
+    wallRight: '#2a1258',
+    ceiling: '#1c0a3c',
+    /** Marcos de profundidad pegados a las paredes. */
+    ring: '#c77dff',
   },
 
   lights: {
-    /** Cielo blanco y rebote lila: el pato toma un poco de violeta desde abajo. */
-    hemisphere: { sky: '#ffffff', ground: '#e9d7ff', intensity: 2.1 },
-    directional: { color: '#ffffff', intensity: 1.3, position: [0.3, 0.8, 0.6] as [number, number, number] },
+    hemisphere: { sky: '#e2c8ff', ground: '#2a0f52', intensity: 1.5 },
+    directional: { color: '#ffffff', intensity: 1.8, position: [0.3, 0.8, 0.6] as [number, number, number] },
+    /** Luz magenta al fondo, detrás del pato: gradiente de luz con la profundidad. */
+    back: { color: '#ff4fd8', intensity: 0.06, distance: 0.6 },
   },
 
-  /** Orbes: amarillo pato, violeta, cian y rosa del sitio. */
-  balls: ['#ffd600', '#af2eff', '#2fd9ff', '#e467a8'],
-  ballEmissive: 0.2,
-  /** Sombras violetas, como las contact shadows de tuxdi.com. */
-  shadow: '#4c2882',
-  shadowOpacity: 0.35,
+  /** Niebla lineal (distancia desde el ojo, metros): el fondo se apaga con la profundidad. */
+  fog: { color: '#12052a', near: 0.85, far: 2.4 },
+
+  /** Orbes: amarillo pato, cian, rosa y verde. Nada violeta: sobre violeta no se ve. */
+  balls: ['#ffd600', '#2fd9ff', '#ff4fb0', '#7dff8a'],
+  ballEmissive: 0.55,
+  /** Anillo que deja una bola al rebotar. */
+  bounceRing: '#ffffff',
+
+  /** Formas flotantes. */
+  floaters: ['#ffd600', '#2fd9ff', '#ff4fb0', '#c77dff', '#f2e6ff'],
+
+  shadow: '#05010d',
+  shadowOpacity: 0.55,
 } as const

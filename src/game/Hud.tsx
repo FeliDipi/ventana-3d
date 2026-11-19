@@ -52,7 +52,7 @@ export function Hud({ phase, score, lives, best, newRecord, counter, hits, pause
               ? 'El pato del fondo te tira bolas. Mové la cabeza para esquivarlas.'
               : 'El pato del fondo te tira bolas. Mové el mouse para esquivarlas.'}
           </p>
-          <p className="hud__muted">3 vidas · cuando amaga, se viene el tiro</p>
+          <p className="hud__muted">3 vidas · ojo con los amagues, las curvas y los rebotes</p>
           <button className="hud__button" onClick={onStart}>
             Jugar <kbd>Espacio</kbd>
           </button>

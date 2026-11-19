@@ -5,28 +5,28 @@
   font-display: swap;
 }
 
-/* Paleta Tuxdi · "Lavanda clara" (los mismos valores que src/theme.ts). */
+/* Paleta Tuxdi · "Violeta profundo" (el fondo coincide con src/theme.ts). */
 :root {
-  --bg: #fbf5ff;
-  --primary: #17082f;
-  --secondary: #af2eff;
-  --violet: #4c2882;
-  --text: #17082f;
-  --muted: rgba(76, 40, 130, 0.75);
-  --accent: #af2eff;
+  --bg: #12052a;
+  --primary: #ffffff;
+  --secondary: #c77dff;
+  --violet: #c9a7ff;
+  --text: #f5ecff;
+  --muted: rgba(220, 200, 255, 0.7);
+  --accent: #b44dff;
   --duck: #ffd600;
   --duck-deep: #ffb800;
-  --ok: #af2eff;
-  --bad: #e467a8;
-  --panel: rgba(255, 255, 255, 0.8);
-  --panel-solid: #ffffff;
-  --panel-border: rgba(175, 46, 255, 0.28);
-  --shadow-soft: 0 8px 28px rgba(76, 40, 130, 0.15);
+  --ok: #7dff8a;
+  --bad: #ff4fb0;
+  --panel: rgba(28, 10, 60, 0.68);
+  --panel-solid: #1d0a3d;
+  --panel-border: rgba(180, 77, 255, 0.45);
+  --shadow-soft: 0 8px 28px rgba(5, 1, 13, 0.55);
   --font-body: 'Sora', system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-title: 'Avant Garde', 'Sora', system-ui, sans-serif;
   font: 300 14px/1.45 var(--font-body);
   color: var(--text);
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 *,
@@ -142,7 +142,7 @@ button[aria-pressed='true'] {
 .settings input {
   font: inherit;
   color: var(--text);
-  background: #fff;
+  background: var(--panel-solid);
   border: 1px solid var(--panel-border);
   border-radius: 6px;
   padding: 4px 6px;
@@ -208,7 +208,7 @@ button[aria-pressed='true'] {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #fff;
-  background: var(--secondary);
+  background: var(--accent);
   border-radius: 500px;
   box-shadow: 0 8px 24px rgba(175, 46, 255, 0.35);
   pointer-events: none;
@@ -341,7 +341,7 @@ button[aria-pressed='true'] {
   backdrop-filter: blur(10px);
   border: 1px solid var(--panel-border);
   border-radius: 28px;
-  box-shadow: 0 24px 60px rgba(76, 40, 130, 0.18), 0 0 80px rgba(175, 46, 255, 0.12);
+  box-shadow: 0 24px 60px rgba(5, 1, 13, 0.6), 0 0 80px rgba(180, 77, 255, 0.22);
 }
 
 .hud__panel--small {
@@ -397,7 +397,7 @@ button[aria-pressed='true'] {
   font: 800 14px/1 var(--font-title);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--primary);
+  color: #17082f;
   background: var(--duck-deep);
   border: none;
   border-radius: 500px;
@@ -428,7 +428,7 @@ button[aria-pressed='true'] {
   font: 800 140px/1 var(--font-title);
   color: transparent;
   -webkit-text-stroke: 3px var(--secondary);
-  text-shadow: 0 6px 30px rgba(175, 46, 255, 0.25);
+  text-shadow: 0 0 30px rgba(199, 125, 255, 0.55);
   animation: hud-count 1s ease-out forwards;
 }
 

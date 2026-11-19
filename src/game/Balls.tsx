@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, type RefObject } from 'react'
 import {
+  AdditiveBlending,
   CanvasTexture,
   Color,
   Group,
@@ -8,6 +9,7 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
+  RingGeometry,
   SphereGeometry,
   Sprite,
   SpriteMaterial,
@@ -23,18 +25,30 @@ import {
   AIM_JITTER,
   BALL_RADIUS,
   ballSpeed,
+  bounceChance,
+  BOUNCE_MAX_Z,
+  BURST_COUNT,
+  BURST_GAP_S,
+  burstChance,
+  CURVE_OFFSET,
+  curveChance,
   DOUBLE_GAP_S,
   doubleChance,
-  LEAD_MAX,
-  LEAD_MIN,
+  FAN_SPREAD,
+  fanChance,
+  FEINT_DELAY_S,
+  FEINT_WINDUP_S,
+  feintChance,
   FIRST_BALL_DELAY_S,
   HIT_RADIUS,
   INVULNERABLE_S,
+  LEAD_MAX,
+  LEAD_MIN,
   MAX_BALLS,
-  WINDUP_MAX_S,
-  WINDUP_SHARE,
   progress,
   spawnInterval,
+  WINDUP_MAX_S,
+  WINDUP_SHARE,
 } from './difficulty'
 import type { GameRuntime } from './useGame'
 
@@ -49,25 +63,46 @@ const DESPAWN_PAST_EYE = 0.15
 /** Suavizado de la velocidad del ojo usada para anticipar. */
 const EYE_VEL_LAMBDA = 6
 
-const TRAIL = 5
+const TRAIL = 7
 /** Separación temporal entre fantasmas de la estela. */
-const TRAIL_STEP_S = 0.022
+const TRAIL_STEP_S = 0.02
 
 const COLORS = THEME.balls
-/** Halo additivo alrededor del orbe (no hay bloom): diámetro en radios de bola. */
-const HALO_SCALE = 4.2
+/** Halo aditivo alrededor del orbe (no hay bloom): diámetro en radios de bola. */
+const HALO_SCALE = 5.5
 /** La bola sale chica del pico y se infla en vuelo (solo visual: el golpe usa HIT_RADIUS). */
 const BIRTH_SCALE = 0.3
 const GROW_S = 0.3
+
+/** Anillos que deja un rebote. */
+const RINGS = 8
+const RING_S = 0.45
+const RING_GROW = 7
+/** Despegue del anillo respecto de la superficie (evita z-fighting). */
+const RING_LIFT = 0.002
+
+type BallKind = 'straight' | 'curve' | 'bounce'
+
+/** Superficie de rebote: plano `axis = plane`, con el interior hacia `sign`. */
+interface Bounce {
+  axis: 0 | 1
+  plane: number
+  sign: 1 | -1
+  done: boolean
+}
 
 interface Slot {
   active: boolean
   /** Ya se decidió golpe o esquiva. */
   judged: boolean
   age: number
+  kind: BallKind
   pos: Vector3
   prev: Vector3
   vel: Vector3
+  /** Aceleración constante (efecto); cero en las demás. */
+  acc: Vector3
+  bounce: Bounce
   ball: Mesh
   ballMat: MeshStandardMaterial
   halo: Sprite
@@ -78,30 +113,28 @@ interface Slot {
   shadowMat: MeshBasicMaterial
 }
 
-function makeGlowTexture() {
-  const size = 64
-  const canvas = document.createElement('canvas')
-  canvas.width = canvas.height = size
-  const ctx = canvas.getContext('2d')!
-  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
-  g.addColorStop(0, 'rgba(255,255,255,0.9)')
-  g.addColorStop(0.25, 'rgba(255,255,255,0.35)')
-  g.addColorStop(0.6, 'rgba(255,255,255,0.08)')
-  g.addColorStop(1, 'rgba(255,255,255,0)')
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, size, size)
-  return new CanvasTexture(canvas)
+interface RingSlot {
+  age: number
+  mesh: Mesh
+  mat: MeshBasicMaterial
 }
 
-function makeShadowTexture() {
+interface Shot {
+  /** Desvío lateral del blanco (abanico). */
+  offsetX: number
+  /** Error de puntería ya sorteado (el abanico comparte uno para no cerrar el hueco). */
+  jitter?: { x: number; y: number }
+  /** Tipo forzado; si no, se sortea. */
+  kind?: BallKind
+}
+
+function radialTexture(stops: [number, string][]) {
   const size = 64
   const canvas = document.createElement('canvas')
   canvas.width = canvas.height = size
   const ctx = canvas.getContext('2d')!
   const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
-  g.addColorStop(0, 'rgba(0,0,0,1)')
-  g.addColorStop(0.5, 'rgba(0,0,0,0.6)')
-  g.addColorStop(1, 'rgba(0,0,0,0)')
+  for (const [at, c] of stops) g.addColorStop(at, c)
   ctx.fillStyle = g
   ctx.fillRect(0, 0, size, size)
   return new CanvasTexture(canvas)
@@ -112,12 +145,23 @@ function createPool() {
   const group = new Group()
   const sphere = new SphereGeometry(BALL_RADIUS, 32, 20)
   const plane = new PlaneGeometry(1, 1).rotateX(-Math.PI / 2)
-  const shadowTex = makeShadowTexture()
-  const glowTex = makeGlowTexture()
+  const ringGeo = new RingGeometry(0.75, 1, 40)
+  const shadowTex = radialTexture([
+    [0, 'rgba(0,0,0,1)'],
+    [0.5, 'rgba(0,0,0,0.6)'],
+    [1, 'rgba(0,0,0,0)'],
+  ])
+  const glowTex = radialTexture([
+    [0, 'rgba(255,255,255,0.95)'],
+    [0.2, 'rgba(255,255,255,0.45)'],
+    [0.55, 'rgba(255,255,255,0.1)'],
+    [1, 'rgba(255,255,255,0)'],
+  ])
   const slots: Slot[] = []
 
   for (let i = 0; i < MAX_BALLS; i++) {
-    const ballMat = new MeshStandardMaterial({ roughness: 0.18, metalness: 0 })
+    // Las bolas no se lavan con la niebla: son lo que hay que mirar.
+    const ballMat = new MeshStandardMaterial({ roughness: 0.18, metalness: 0, fog: false })
     // El mismo borde violeta del pato: los orbes son de la misma familia.
     ballMat.onBeforeCompile = fresnelRim
     ballMat.customProgramCacheKey = () => RIM_CACHE_KEY
@@ -129,7 +173,9 @@ function createPool() {
       map: glowTex,
       transparent: true,
       depthWrite: false,
-      opacity: 0.35,
+      blending: AdditiveBlending,
+      opacity: 0.6,
+      fog: false,
     })
     const halo = new Sprite(haloMat)
     halo.scale.setScalar(BALL_RADIUS * HALO_SCALE)
@@ -141,10 +187,11 @@ function createPool() {
       const m = new MeshBasicMaterial({
         transparent: true,
         depthWrite: false,
-        opacity: 0.3 * (1 - k / TRAIL),
+        blending: AdditiveBlending,
+        opacity: 0.45 * (1 - k / TRAIL),
+        fog: false,
       })
       const g = new Mesh(sphere, m)
-      g.scale.setScalar(1 - (k + 1) * 0.13)
       g.visible = false
       ghostMats.push(m)
       ghosts.push(g)
@@ -168,9 +215,12 @@ function createPool() {
       active: false,
       judged: false,
       age: 0,
+      kind: 'straight',
       pos: new Vector3(),
       prev: new Vector3(),
       vel: new Vector3(),
+      acc: new Vector3(),
+      bounce: { axis: 1, plane: 0, sign: 1, done: true },
       ball,
       ballMat,
       halo,
@@ -182,9 +232,25 @@ function createPool() {
     })
   }
 
+  const rings: RingSlot[] = []
+  for (let i = 0; i < RINGS; i++) {
+    const mat = new MeshBasicMaterial({
+      color: THEME.bounceRing,
+      transparent: true,
+      depthWrite: false,
+      blending: AdditiveBlending,
+      toneMapped: false,
+    })
+    const mesh = new Mesh(ringGeo, mat)
+    mesh.visible = false
+    group.add(mesh)
+    rings.push({ age: RING_S, mesh, mat })
+  }
+
   const dispose = () => {
     sphere.dispose()
     plane.dispose()
+    ringGeo.dispose()
     shadowTex.dispose()
     glowTex.dispose()
     for (const s of slots) {
@@ -193,8 +259,9 @@ function createPool() {
       s.shadowMat.dispose()
       s.ghostMats.forEach((m) => m.dispose())
     }
+    rings.forEach((r) => r.mat.dispose())
   }
-  return { group, slots, dispose }
+  return { group, slots, rings, dispose }
 }
 
 function hide(s: Slot) {
@@ -203,6 +270,20 @@ function hide(s: Slot) {
   s.shadow.visible = false
   s.ghosts.forEach((g) => (g.visible = false))
 }
+
+/** Del lado exterior del plano de rebote, lo refleja al interior. */
+function keepInside(v: Vector3, b: Bounce) {
+  const c = v.getComponent(b.axis)
+  if (b.sign * (c - b.plane) < 0) v.setComponent(b.axis, 2 * b.plane - c)
+}
+
+/** Superficies de rebote con su peso: piso más que paredes, techo lo menos. */
+const BOUNCE_SURFACES = [
+  { axis: 1, side: 'floor', weight: 3 },
+  { axis: 0, side: 'left', weight: 1.5 },
+  { axis: 0, side: 'right', weight: 1.5 },
+  { axis: 1, side: 'ceiling', weight: 1 },
+] as const
 
 interface Props {
   gameRef: RefObject<GameRuntime>
@@ -225,8 +306,10 @@ export function Balls({ gameRef, appliedRef, viewportRef, duckRef, onDodge, onHi
     /** Duración del amague del próximo tiro y si ya se le avisó al pato. */
     windup: WINDUP_MAX_S,
     windupFired: false,
-    /** Segundo tiro agendado (tiempo de juego), o -1. */
-    followUp: -1,
+    /** El último tiro programado fue un amague (no se encadenan dos). */
+    afterFeint: false,
+    /** Tiros sin amague agendados (doble, ráfaga), en tiempo de juego. */
+    queue: [] as number[],
     invulnerableUntil: 0,
     colorIndex: 0,
     lastEye: { x: 0, y: 0 },
@@ -234,6 +317,8 @@ export function Balls({ gameRef, appliedRef, viewportRef, duckRef, onDodge, onHi
   })
   const tmpColor = useMemo(() => new Color(), [])
   const origin = useMemo(() => new Vector3(), [])
+  const target = useMemo(() => new Vector3(), [])
+  const aux = useMemo(() => new Vector3(), [])
 
   useEffect(() => () => pool.dispose(), [pool])
 
@@ -248,7 +333,57 @@ export function Balls({ gameRef, appliedRef, viewportRef, duckRef, onDodge, onHi
     return out.set(eye.x + k * (ax - eye.x), eye.y + k * (ay - eye.y), SPAWN_Z)
   }
 
-  const spawn = (eye: Vec3, from: Vector3) => {
+  const pickKind = (t: number): BallKind => {
+    const r = Math.random()
+    const c = curveChance(t)
+    if (r < c) return 'curve'
+    if (r < c + bounceChance(t)) return 'bounce'
+    return 'straight'
+  }
+
+  /**
+   * Rebote: se apunta a la imagen especular del blanco respecto de una superficie.
+   * Devuelve false si ninguna superficie da un rebote dentro de la habitación.
+   * No modifica `tgt` (usa `aux`).
+   */
+  const aimBounce = (s: Slot, tgt: Vector3, speed: number) => {
+    const r = BALL_RADIUS
+    const B = ROOM_BOUNDS
+    const candidates: { axis: 0 | 1; plane: number; sign: 1 | -1; weight: number }[] = []
+    for (const surf of BOUNCE_SURFACES) {
+      const plane =
+        surf.side === 'floor'
+          ? B.floorY + r
+          : surf.side === 'ceiling'
+            ? B.ceilingY - r
+            : surf.side === 'left'
+              ? -B.halfWidth + r
+              : B.halfWidth - r
+      const sign: 1 | -1 = surf.side === 'floor' || surf.side === 'left' ? 1 : -1
+      const a = s.pos.getComponent(surf.axis)
+      const b = tgt.getComponent(surf.axis)
+      // Inicio y blanco del lado de adentro.
+      if (sign * (a - plane) <= 0 || sign * (b - plane) <= 0) continue
+      const mirrored = 2 * plane - b
+      const u = (a - plane) / (a - mirrored)
+      const zCross = s.pos.z + u * (tgt.z - s.pos.z)
+      if (zCross > BOUNCE_MAX_Z || zCross < s.pos.z + 0.1) continue
+      candidates.push({ axis: surf.axis, plane, sign, weight: surf.weight })
+    }
+    if (!candidates.length) return false
+    let pick = Math.random() * candidates.reduce((sum, c) => sum + c.weight, 0)
+    const c = candidates.find((x) => (pick -= x.weight) < 0) ?? candidates[candidates.length - 1]
+    const aim = aux.copy(tgt)
+    aim.setComponent(c.axis, 2 * c.plane - tgt.getComponent(c.axis))
+    s.vel.copy(aim).sub(s.pos).setLength(speed)
+    s.bounce.axis = c.axis
+    s.bounce.plane = c.plane
+    s.bounce.sign = c.sign
+    s.bounce.done = false
+    return true
+  }
+
+  const spawn = (eye: Vec3, from: Vector3, shot: Shot) => {
     const s = pool.slots.find((x) => !x.active)
     if (!s) return
     const st = sim.current
@@ -259,25 +394,70 @@ export function Balls({ gameRef, appliedRef, viewportRef, duckRef, onDodge, onHi
     const sz = clamp(from.z, ROOM_BOUNDS.backZ + r, -r)
     s.pos.set(sx, sy, sz)
     s.prev.copy(s.pos)
+    s.acc.set(0, 0, 0)
+    s.bounce.done = true
 
     // Blanco: donde va a estar tu cabeza (anticipación creciente) más un error menor al radio de golpe.
     const speed = ballSpeed(st.t)
     const travel = Math.hypot(eye.x - sx, eye.y - sy, eye.z - sz) / speed
     const lead = (LEAD_MIN + (LEAD_MAX - LEAD_MIN) * progress(st.t)) * travel
-    const ang = Math.random() * Math.PI * 2
-    const jit = Math.sqrt(Math.random()) * AIM_JITTER
-    const tx = eye.x + st.eyeVel.x * lead + Math.cos(ang) * jit
-    const ty = eye.y + st.eyeVel.y * lead + Math.sin(ang) * jit
-    s.vel.set(tx - sx, ty - sy, eye.z - sz).setLength(speed)
+    let jx: number
+    let jy: number
+    if (shot.jitter) {
+      jx = shot.jitter.x
+      jy = shot.jitter.y
+    } else {
+      const ang = Math.random() * Math.PI * 2
+      const jit = Math.sqrt(Math.random()) * AIM_JITTER
+      jx = Math.cos(ang) * jit
+      jy = Math.sin(ang) * jit
+    }
+    const tgt = target.set(
+      eye.x + st.eyeVel.x * lead + jx + shot.offsetX,
+      eye.y + st.eyeVel.y * lead + jy,
+      eye.z,
+    )
+
+    let kind = shot.kind ?? pickKind(st.t)
+    if (kind === 'curve') {
+      // Aceleración lateral constante: sale apuntando a un costado y se cierra sobre el blanco.
+      // Con vz constante cruza el plano del ojo en T exacto: v = (blanco − inicio − ½·a·T²)/T.
+      const T = Math.hypot(tgt.x - sx, tgt.y - sy, tgt.z - sz) / speed
+      // Mayormente horizontal, a veces en diagonal.
+      const ang = (Math.random() < 0.5 ? 0 : Math.PI) + (Math.random() * 2 - 1) * 0.6
+      const off = CURVE_OFFSET.min + Math.random() * (CURVE_OFFSET.max - CURVE_OFFSET.min)
+      const dx = Math.cos(ang) * off
+      const dy = Math.sin(ang) * off
+      s.acc.set((2 * dx) / (T * T), (2 * dy) / (T * T), 0)
+      s.vel.set((tgt.x - sx - dx) / T, (tgt.y - sy - dy) / T, (tgt.z - sz) / T)
+    } else if (kind === 'bounce' && !aimBounce(s, tgt, speed)) {
+      kind = 'straight'
+    }
+    if (kind === 'straight') s.vel.set(tgt.x - sx, tgt.y - sy, tgt.z - sz).setLength(speed)
 
     const color = COLORS[st.colorIndex++ % COLORS.length]
     s.ballMat.color.set(color)
     s.ballMat.emissive.copy(tmpColor.set(color)).multiplyScalar(THEME.ballEmissive)
     s.haloMat.color.set(color)
     s.ghostMats.forEach((m) => m.color.set(color))
+    s.kind = kind
     s.active = true
     s.judged = false
     s.age = 0
+  }
+
+  const spawnRing = (s: Slot) => {
+    const ring = pool.rings.reduce((oldest, r) => (r.age > oldest.age ? r : oldest), pool.rings[0])
+    const b = s.bounce
+    const m = ring.mesh
+    m.position.copy(s.pos)
+    m.position.setComponent(b.axis, b.plane - b.sign * (BALL_RADIUS - RING_LIFT))
+    // El anillo nace en el plano XY (normal +Z): se gira hacia la normal de la superficie.
+    if (b.axis === 1) m.rotation.set(b.sign > 0 ? -Math.PI / 2 : Math.PI / 2, 0, 0)
+    else m.rotation.set(0, b.sign > 0 ? Math.PI / 2 : -Math.PI / 2, 0)
+    ring.mat.color.copy(s.ballMat.color)
+    ring.age = 0
+    m.visible = true
   }
 
   useFrame((_, rawDt) => {
@@ -300,9 +480,20 @@ export function Balls({ gameRef, appliedRef, viewportRef, duckRef, onDodge, onHi
       st.nextSpawn = FIRST_BALL_DELAY_S
       st.windup = WINDUP_MAX_S
       st.windupFired = false
-      st.followUp = -1
+      st.afterFeint = false
+      st.queue.length = 0
       st.invulnerableUntil = 0
       pool.slots.forEach(hide)
+    }
+
+    // Los anillos de rebote se apagan solos, también en pausa visual.
+    for (const ring of pool.rings) {
+      if (ring.age >= RING_S) continue
+      ring.age += dt
+      const u = Math.min(1, ring.age / RING_S)
+      ring.mesh.scale.setScalar(BALL_RADIUS * (1 + RING_GROW * (1 - (1 - u) * (1 - u))))
+      ring.mat.opacity = (1 - u) * (1 - u)
+      if (u >= 1) ring.mesh.visible = false
     }
 
     const playing = g.phase === 'playing' && !g.paused
@@ -318,16 +509,49 @@ export function Balls({ gameRef, appliedRef, viewportRef, duckRef, onDodge, onHi
         st.windupFired = true
         duck.windup(st.nextSpawn - st.t)
       }
-      const shoot = () => spawn(eye, duck ? duck.throwBall(origin) : randomOrigin(eye, origin))
-      if (st.followUp >= 0 && st.t >= st.followUp) {
-        st.followUp = -1
-        shoot()
+      const release = () => (duck ? duck.throwBall(origin) : randomOrigin(eye, origin))
+
+      // Tiros sin amague agendados (doble, ráfaga).
+      for (let i = st.queue.length - 1; i >= 0; i--) {
+        if (st.t < st.queue[i]) continue
+        st.queue.splice(i, 1)
+        spawn(eye, release(), { offsetX: 0, kind: 'straight' })
       }
+
       while (st.t >= st.nextSpawn) {
-        shoot()
-        if (Math.random() < doubleChance(st.t)) st.followUp = st.t + DOUBLE_GAP_S
+        // Amague: el pato hace todo el gesto y no tira; el tiro de verdad llega enseguida.
+        if (duck && !st.afterFeint && Math.random() < feintChance(st.t)) {
+          duck.feint()
+          st.afterFeint = true
+          st.nextSpawn += FEINT_DELAY_S
+          st.windup = FEINT_WINDUP_S
+          st.windupFired = false
+          continue
+        }
+        st.afterFeint = false
+
+        const at = st.nextSpawn
+        const r = Math.random()
+        const fan = fanChance(st.t)
+        let extra = 0
+        if (r < fan) {
+          // Abanico: tres bolas a la vez; el hueco queda entre la del medio y una del costado.
+          const from = release()
+          const ang = Math.random() * Math.PI * 2
+          const jit = Math.sqrt(Math.random()) * AIM_JITTER * 0.5
+          const jitter = { x: Math.cos(ang) * jit, y: Math.sin(ang) * jit }
+          for (const offsetX of [-FAN_SPREAD, 0, FAN_SPREAD]) spawn(eye, from, { offsetX, jitter, kind: 'straight' })
+        } else if (r < fan + burstChance(st.t)) {
+          spawn(eye, release(), { offsetX: 0, kind: 'straight' })
+          for (let k = 1; k < BURST_COUNT; k++) st.queue.push(at + k * BURST_GAP_S)
+          extra = (BURST_COUNT - 1) * BURST_GAP_S
+        } else {
+          spawn(eye, release(), { offsetX: 0 })
+          if (Math.random() < doubleChance(st.t)) st.queue.push(at + DOUBLE_GAP_S)
+        }
+
         const interval = spawnInterval(st.t)
-        st.nextSpawn += interval
+        st.nextSpawn += interval + extra
         st.windup = Math.min(WINDUP_MAX_S, interval * WINDUP_SHARE)
         st.windupFired = false
       }
@@ -336,8 +560,18 @@ export function Balls({ gameRef, appliedRef, viewportRef, duckRef, onDodge, onHi
     for (const s of pool.slots) {
       if (!s.active) continue
       s.prev.copy(s.pos)
-      s.pos.addScaledVector(s.vel, dt)
+      s.pos.addScaledVector(s.vel, dt).addScaledVector(s.acc, 0.5 * dt * dt)
+      s.vel.addScaledVector(s.acc, dt)
       s.age += dt
+
+      // Rebote: al cruzar la superficie se refleja la posición y la velocidad.
+      const b = s.bounce
+      if (!b.done && b.sign * (s.pos.getComponent(b.axis) - b.plane) < 0) {
+        b.done = true
+        keepInside(s.pos, b)
+        s.vel.setComponent(b.axis, -s.vel.getComponent(b.axis))
+        spawnRing(s)
+      }
 
       // Juicio al cruzar el plano del ojo: se interpola el XY del cruce.
       if (!s.judged && s.prev.z < eye.z && s.pos.z >= eye.z) {
@@ -370,8 +604,10 @@ export function Balls({ gameRef, appliedRef, viewportRef, duckRef, onDodge, onHi
         const ghost = s.ghosts[k]
         ghost.visible = s.age > back
         if (ghost.visible) {
-          ghost.position.copy(s.pos).addScaledVector(s.vel, -back)
-          ghost.scale.setScalar((1 - (k + 1) * 0.13) * grow)
+          // Hacia atrás en la parábola exacta; tras el rebote, lo que cae afuera se refleja.
+          ghost.position.copy(s.pos).addScaledVector(s.vel, -back).addScaledVector(s.acc, 0.5 * back * back)
+          if (b.done && s.kind === 'bounce') keepInside(ghost.position, b)
+          ghost.scale.setScalar((1 - (k + 1) * 0.1) * grow)
         }
       }
 
@@ -381,8 +617,8 @@ export function Balls({ gameRef, appliedRef, viewportRef, duckRef, onDodge, onHi
       if (inRoom) {
         const h = Math.max(0, s.pos.y - ROOM_BOUNDS.floorY - BALL_RADIUS)
         s.shadow.position.set(s.pos.x, ROOM_BOUNDS.floorY + 0.001, s.pos.z)
-        s.shadow.scale.setScalar(BALL_RADIUS * 2.6 * (1 + h * 2.5))
-        s.shadowMat.opacity = THEME.shadowOpacity * clamp(1 - h / 0.4, 0.2, 1)
+        s.shadow.scale.setScalar(BALL_RADIUS * 2.6 * (1 + h * 4))
+        s.shadowMat.opacity = THEME.shadowOpacity * clamp(1 - h / 0.3, 0.2, 1)
       }
     }
   })

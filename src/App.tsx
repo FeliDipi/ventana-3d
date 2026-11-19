@@ -23,6 +23,7 @@ import { unlockQuack } from './duck/quack'
 import { Balls } from './game/Balls'
 import { Hud } from './game/Hud'
 import { useGame } from './game/useGame'
+import { Floaters } from './scene/Floaters'
 import { CenterMarker, Room } from './scene/Room'
 import { WindowCamera } from './scene/WindowCamera'
 import { clamp, DEFAULT_EYE_Z, FAR, NEAR, type Vec3, type ViewTarget } from './scene/windowMath'
@@ -195,8 +196,10 @@ export default function App() {
           gl={{ antialias: true }}
         >
           <color attach="background" args={[THEME.background]} />
+          <fog attach="fog" args={[THEME.fog.color, THEME.fog.near, THEME.fog.far]} />
           <WindowCamera targetRef={targetRef} viewportRef={viewportRef} appliedRef={appliedRef} />
           <Room />
+          <Floaters />
           <Suspense fallback={null}>
             <Duck apiRef={duckRef} gameRef={game.gameRef} appliedRef={appliedRef} viewportRef={viewportRef} />
           </Suspense>

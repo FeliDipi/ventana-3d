@@ -36,6 +36,20 @@ export const clampEye = (v: Vec3): Vec3 => ({
   z: clamp(v.z, EYE_LIMITS.zMin, EYE_LIMITS.zMax),
 })
 
+/** Metros por píxel CSS si todavía no se midió el viewport. */
+export const FALLBACK_MPP = 0.3 / 1000
+
+/**
+ * Media abertura (metros) a partir del tamaño del canvas en píxeles CSS. La cámara y
+ * la habitación usan esta misma medida, así las paredes quedan al ras del canvas.
+ */
+export function apertureHalf(widthPx: number, heightPx: number, mpp: number | undefined, out: Vec2): Vec2 {
+  const m = mpp ?? FALLBACK_MPP
+  out.x = (widthPx * m) / 2
+  out.y = (heightPx * m) / 2
+  return out
+}
+
 /** Suavizado exponencial independiente del frame rate. */
 export const damp = (current: number, target: number, lambda: number, dt: number) =>
   current + (target - current) * (1 - Math.exp(-lambda * dt))

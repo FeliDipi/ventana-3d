@@ -1,8 +1,9 @@
 import { useFrame, useThree } from '@react-three/fiber'
-import { useLayoutEffect, useRef, type RefObject } from 'react'
+import { useLayoutEffect, useMemo, useRef, type RefObject } from 'react'
 import type { PerspectiveCamera } from 'three'
 import type { Viewport } from './physical'
-import { applyOffAxis, clampEye, damp, DEFAULT_EYE_Z, type Vec3, type ViewTarget } from './windowMath'
+import { updateRoomBounds } from './roomBounds'
+import { apertureHalf, applyOffAxis, clampEye, damp, DEFAULT_EYE_Z, type Vec2, type Vec3, type ViewTarget } from './windowMath'
 
 /** Con la cámara el filtrado está en el tracker: acá solo se interpola entre muestras. */
 const CAMERA_LAMBDA = 30
@@ -21,12 +22,15 @@ interface Props {
 export function WindowCamera({ targetRef, viewportRef, appliedRef }: Props) {
   const camera = useThree((s) => s.camera) as PerspectiveCamera
   const eye = useRef<Vec3>({ x: 0, y: 0, z: DEFAULT_EYE_Z })
+  const half = useMemo<Vec2>(() => ({ x: 0, y: 0 }), [])
 
   useLayoutEffect(() => {
     camera.quaternion.identity()
     camera.position.set(0, 0, DEFAULT_EYE_Z)
   }, [camera])
 
+  // Prioridad negativa: corre antes que el resto de la escena, que lee el ojo y los
+  // límites de la habitación de este mismo frame.
   useFrame((state, dt) => {
     const step = Math.min(dt, 0.1)
     const t = targetRef.current
@@ -44,16 +48,17 @@ export function WindowCamera({ targetRef, viewportRef, appliedRef }: Props) {
 
     // Abertura = tamaño físico del canvas. Se recalcula cada frame con el tamaño
     // actual del canvas (cubre el resize sin depender de cuándo se actualiza el viewport).
-    const mpp = viewportRef.current?.mpp ?? 0.3 / 1000
     const { width, height } = state.size
-    applyOffAxis(camera, e, (width * mpp) / 2, (height * mpp) / 2)
+    apertureHalf(width, height, viewportRef.current?.mpp, half)
+    applyOffAxis(camera, e, half.x, half.y)
+    updateRoomBounds(half.x, half.y)
 
     if (appliedRef) {
       appliedRef.current.x = e.x
       appliedRef.current.y = e.y
       appliedRef.current.z = e.z
     }
-  })
+  }, -1)
 
   return null
 }

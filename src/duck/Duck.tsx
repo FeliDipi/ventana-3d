@@ -38,17 +38,17 @@ import { createWalk, turnTowards, waddlePose } from './waddle'
 
 const MODEL_URL = `${import.meta.env.BASE_URL}models/duck.glb`
 
-/** Altura del pato en metros de mundo (la habitación mide ~0,35 m). */
-export const DUCK_HEIGHT = 0.12
+/** Altura del pato en metros de mundo (la habitación mide lo que la abertura, ~0,17 m de alto). */
+export const DUCK_HEIGHT = 0.075
 /** Franja del fondo por donde camina. */
-export const DUCK_Z = ROOM_BOUNDS.backZ + 0.12
-const WALL_MARGIN = 0.09
+export const DUCK_Z = ROOM_BOUNDS.backZ + 0.1
+const WALL_MARGIN = 0.06
 /** Fracción de la media abertura (vista desde el ojo) dentro de la que elige destino. */
 const VIEW_REACH = 0.6
 
-const WALK_SPEED = 0.17 // m/s
+const WALK_SPEED = 0.12 // m/s
 /** Metros por media zancada. */
-const STRIDE_LEN = 0.035
+const STRIDE_LEN = 0.022
 const TURN_RATE = 7 // rad/s
 /** Al caminar no se pone de perfil del todo: tres cuartos, para que se le vea la cara. */
 const WALK_YAW = Math.PI / 2 * 0.8
@@ -62,6 +62,8 @@ const LOOK_EYE_LIMIT = MathUtils.degToRad(18)
 
 /** Rebote al soltar la bola. */
 const RELEASE_S = 0.5
+/** Sacudida tras un amague sin tiro. */
+const FEINT_S = 0.5
 
 /** Esquivas seguidas que lo marean ("stun"). */
 const STUN_STREAK = 6
@@ -73,6 +75,8 @@ export interface DuckApi {
   windup(seconds: number): void
   /** Suelta la bola: devuelve en `out` el punto del pico (mundo) y dispara el rebote. */
   throwBall(out: Vector3): Vector3
+  /** Corta el amague sin tirar: sacude la cabeza, como burlándose. */
+  feint(): void
   react(kind: 'hit' | 'dodge'): void
 }
 
@@ -184,6 +188,7 @@ export function Duck({ apiRef, gameRef, appliedRef, viewportRef }: Props) {
     pause: 0.6,
     windup: { active: false, t: 0, dur: 0.4 },
     release: -1,
+    feint: -1,
     beakOpen: 0,
     angry: 0,
     happy: 0,
@@ -273,6 +278,11 @@ export function Duck({ apiRef, gameRef, appliedRef, viewportRef }: Props) {
         scene.updateWorldMatrix(true, false)
         return out.copy(scene.getWorldPosition(tmp)).setY(ROOM_BOUNDS.floorY + DUCK_HEIGHT * 0.7)
       },
+      feint() {
+        const s = st.current
+        s.windup.active = false
+        s.feint = 0
+      },
       react(kind) {
         const s = st.current
         if (kind === 'hit') {
@@ -311,6 +321,7 @@ export function Duck({ apiRef, gameRef, appliedRef, viewportRef }: Props) {
       s.streak = 0
       s.angry = 0
       s.windup.active = false
+      s.feint = -1
       stopBody()
     }
     if (g.phase !== s.phase) {
@@ -320,7 +331,7 @@ export function Duck({ apiRef, gameRef, appliedRef, viewportRef }: Props) {
 
     // ---- Caminata ----
     const w = s.walk
-    const busy = s.windup.active || (s.release >= 0 && s.release < RELEASE_S * 0.6)
+    const busy = s.windup.active || (s.release >= 0 && s.release < RELEASE_S * 0.6) || s.feint >= 0
     const canWalk = !busy && !g.paused && g.phase !== 'over'
     const facePlayer = Math.atan2(eye.x - w.x, eye.z - DUCK_Z)
     let desiredYaw = facePlayer
@@ -366,7 +377,15 @@ export function Duck({ apiRef, gameRef, appliedRef, viewportRef }: Props) {
       tilt = 0.3 * Math.exp(-r * 6) * Math.cos(r * 12)
       beak = r < 0.15 ? 1 : 0
       if (r > RELEASE_S) s.release = -1
+    } else if (s.feint >= 0) {
+      // Se endereza de golpe con un temblor chico: el tiro no salió.
+      const f = (s.feint += dt)
+      sy = 1 + 0.07 * Math.exp(-f * 8) * Math.cos(f * 20)
+      tilt = 0.1 * Math.exp(-f * 6) * Math.sin(f * 22)
+      if (f > FEINT_S) s.feint = -1
     }
+    // Sacudida de cabeza del amague (se suma a la mirada más abajo).
+    const shake = s.feint >= 0 ? 0.45 * Math.exp(-s.feint * 5) * Math.sin(s.feint * 32) : 0
     squash.scale.set(1 / Math.sqrt(sy), sy, 1 / Math.sqrt(sy))
     squash.rotation.x = tilt
 
@@ -410,7 +429,7 @@ export function Duck({ apiRef, gameRef, appliedRef, viewportRef }: Props) {
         hy /= reach
       }
       head.rotation.order = 'YXZ'
-      head.rotation.y = hy
+      head.rotation.y = hy + shake
       head.rotation.x = hx
       for (const e of eyes) {
         e.rotation.y = clamp(s.look.y - hy, -LOOK_EYE_LIMIT, LOOK_EYE_LIMIT)
